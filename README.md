@@ -142,6 +142,60 @@ GlobalGates는 단순 가입자 수가 아니라, 중소기업의 **수출강도
 - **원인** — `git core.ignorecase=true` 때문에 대문자 폴더(`Friends`, `Notification` 등)를 소문자로 변경한 내역이 git에 추적되지 않았다. case-sensitive 한 Linux 파일시스템에서 컨트롤러가 경로를 찾지 못했다.
 - **해결** — `core.ignorecase=false`로 전환한 뒤, 대문자 인덱스 파일 29개를 `rm --cached`하고 소문자 경로로 재등록했다.
 
+### 커뮤니티 수정 시 `community_name` NOT NULL 제약 위반
+
+<p align="center">
+  <img src="docs/images/trouble-community-null.png" width="90%" alt="community_name not-null 제약 위반 로그" />
+</p>
+
+**💥 문제 상황** — 커뮤니티 설정에서 커버 이미지만 교체하는 요청에도 `UPDATE tbl_community SET community_name = NULL ...`이 실행되며, `null value in column "community_name" violates not-null constraint` 오류로 500이 발생했다.
+
+**🔍 문제 원인** — `update` 매퍼가 정적 SQL이라 호출될 때마다 `community_name`을 항상 덮어쓴다. 이름을 바꾸지 않는 요청에서는 이 값이 `null`로 전달되는데, 컬럼은 NOT NULL이라 제약을 위반했다.
+
+**🛠️ 해결 방안** — 서비스 계층에서 이름이 실제로 전달된 경우에만 UPDATE를 실행하도록 가드를 두고, 커버 이미지 교체 등 다른 변경은 별도 분기로 분리했다.
+
+```java
+// CommunityService.updateCommunity()
+// 이름이 전달된 경우에만 UPDATE → 커버만 교체하는 요청의 NULL 덮어쓰기 차단
+if (vo.getCommunityName() != null) {
+    communityDAO.update(CommunityVO.builder()
+            .id(communityId)
+            .communityName(vo.getCommunityName())
+            .description(vo.getDescription())
+            .categoryId(vo.getCategoryId())
+            .build());
+}
+```
+
+### 잘못된 서명의 JWT로 인증 필터가 500 오류
+
+<p align="center">
+  <img src="docs/images/trouble-jwt-signature.png" width="90%" alt="JWT SignatureException 로그" />
+</p>
+
+**💥 문제 상황** — 서명이 일치하지 않는 토큰이 들어오면 `JWT signature does not match locally computed signature`(`SignatureException`)가 인증 필터에서 처리되지 못하고, 요청 전체가 500으로 실패했다.
+
+**🔍 문제 원인** — 토큰을 파싱(`parseClaimsJws`)하기 전에 서명 유효성을 먼저 확인하지 않아, 위조·만료 토큰이 곧바로 파싱 단계로 진입하면서 예외가 호출 스택을 타고 그대로 전파됐다.
+
+**🛠️ 해결 방안** — 예외를 잡아 `false`를 돌려주는 `validateToken()`으로 서명을 먼저 검증하고, 통과한 토큰만 `getAuthentication()`으로 넘기도록 순서를 정리했다. 서명이 어긋난 요청은 예외 대신 비인증 상태로 흘려보내 500 대신 정상적인 인증 실패로 처리된다.
+
+```java
+public boolean validateToken(String token) {
+    try {
+        Jwts.parserBuilder().setSigningKey(key).build().parseClaimsJws(token);
+        return true;
+    } catch (Exception e) {   // SignatureException 등 → 위조·만료 토큰
+        return false;
+    }
+}
+
+// AuthenticationFilter — 검증을 통과한 토큰만 파싱·인증
+if (jwtTokenProvider.validateToken(accessToken)) {
+    Authentication auth = jwtTokenProvider.getAuthentication(accessToken);
+    SecurityContextHolder.getContext().setAuthentication(auth);
+}
+```
+
 <br/>
 
 ## QA 테스트
