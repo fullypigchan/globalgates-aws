@@ -146,12 +146,13 @@ GlobalGates는 단순 가입자 수가 아니라, 중소기업의 **수출강도
 
 ## QA 테스트
 
-JUnit 5 · Mockito · AssertJ 기반으로 도메인별 테스트를 작성하고, 단체 QA 단계에서 서로의 작업을 교차 검증했다.
+북마크 · 뉴스 · 커뮤니티 · 채팅 도메인을 직접 검증하고, 발견한 오류를 화면·기능별로 정리했다.
 
-- **단위 · 권한 테스트** — 채팅방·메시지 리액션의 권한 검증(`ChatRoomServiceAuthorizationTest` 등)으로 비인가 사용자의 동작을 차단하고, 게시글·북마크·뉴스 등 서비스 로직을 단위 테스트로 보호했다.
-- **매퍼 테스트** — MyBatis 매퍼별 쿼리를 실제 DB에 대해 검증(Post, Bookmark, News, PostProduct 등).
-- **정적 회귀 테스트**(`StaticQaRegressionTest`) — 신고 등 프론트엔드 ↔ 백엔드 계약(요청 DTO 형태·에러 처리)을 정적 검사로 고정해 회귀를 방지했다.
-- **통합 테스트 분리** — `@SpringBootTest`는 실 DB·Redis·RabbitMQ가 필요해 Docker 빌드 네트워크에서 실행할 수 없어, 배포 빌드에서는 비활성화하고 실 인프라가 갖춰진 로컬·CI 환경에서 실행한다.
+<p align="center">
+  <img src="docs/images/qa.png" width="70%" alt="QA 테스트 결과" />
+</p>
+
+검증은 JUnit 5 · Mockito · AssertJ 단위/권한 테스트와 정적 회귀 테스트로 보완했으며, 실 DB · Redis · RabbitMQ가 필요한 통합 테스트(`@SpringBootTest`)는 배포 빌드와 분리해 로컬 · CI에서 실행한다.
 
 <br/>
 
